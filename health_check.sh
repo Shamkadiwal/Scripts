@@ -1,11 +1,4 @@
 !/bin/bash
-##---------- Author : Sadashiva Murthy M ----------------------------------------------------##
-##---------- Blog site : https://www.simplylinuxfaq.com -------------------------------------##
-##---------- Github page : https://github.com/SimplyLinuxFAQ/health-check-script ------------##
-##---------- Purpose : To quickly check and report health status in a linux system.----------##
-##---------- Tested on : RHEL8(beta)/7/6/5/, SLES/SLED 12/11, Ubuntu14/16/18, Mint16, -------##
-##---------- Boss6(Debian) variants. It may work on other vari as well, but not tested. -----##
-##---------- Updated version : v2.0 (Updated on 30th Dec 2018) ------------------------------##
 ##-----NOTE: This script requires root privileges, otherwise one could run the script -------##
 ##---- as a sudo user who got root privileges. ----------------------------------------------##
 ##----------- "sudo /bin/bash <ScriptName>" -------------------------------------------------##

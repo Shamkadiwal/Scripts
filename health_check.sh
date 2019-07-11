@@ -180,5 +180,3 @@ echo -e "NOTE:- If any of the above fields are marked as \"blank\" or \"NONE\" o
 that means either there is no value present in the system for these fields, otherwise that value may not be available,
 or suppressed since there was an error in fetching details."
 echo -e "\n\t\t %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%"
-echo -e "\t\t   <>--------<> Powered By : https://www.simplylinuxfaq.com <>--------<>"
-echo -e "\t\t %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%"

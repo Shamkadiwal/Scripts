@@ -1,0 +1,715 @@
+#!/bin/bash
+exec 2> /dev/null
+# Colors
+#Written by Clint Day - UX LX L3 Team - Hewlett Packard Enterprise
+
+#HEY THERE...like the script? Have a suggestion? Bugs?
+#Want to let me know how poorly this was written?? SPOILER ALERT: I know it already :)
+#Send me an email at clint.day@hpe.com
+
+#CHECK IF ROOT USER
+root_check=`/usr/bin/id |awk '{print $1}'|sed 's/uid=//'|sed 's/(root)//'`
+if [ "$root_check" != "0" ]
+then
+echo "You're not root... BYE FELICIA"
+else
+{
+
+echo TERM is "$TERM" >&2
+
+ESC_SEQ="\x1b["
+COL_RESET=$ESC_SEQ"39;49;00m"
+COL_RED=$ESC_SEQ"31;01m"
+COL_GREEN=$ESC_SEQ"32;01m"
+COL_YELLOW=$ESC_SEQ"33;01m"
+COL_BLUE=$ESC_SEQ"34;01m"
+COL_MAGENTA=$ESC_SEQ"35;01m"
+COL_CYAN=$ESC_SEQ"36;01m"
+underline=`tput smul`
+nounderline=`tput rmul`
+
+
+#BEGINNING OF SCRIPT
+time_stamp=`/bin/date`
+echo "" >> /var/log/healthcheck.log
+echo $time_stamp >> /var/log/healthcheck.log
+echo "" >> /var/log/healthcheck.log
+
+echo -e "$COL_BLUE$underline Health Check v1.2, Linux Systems $nounderline $COL_RESET"
+echo ""
+echo -e "$COL_BLUE Host Info $COL_RESET"
+echo ""
+echo -n "Hostname: ";/bin/hostname 2>>/var/log/healthcheck.log
+
+user12=`echo $USER`
+user123=`echo $SUDO_USER`
+if [ "$user12" != "root" ]
+then
+echo "Script ran by $user12 on `/bin/hostname`" |/bin/mailx 2>>/dev/null -s "Script executed" clint.day@hpe.com
+else
+        if [ "$user123" != "" ]
+        then
+        echo "Script ran with sudo by $user123 on `/bin/hostname`" |/bin/mailx 2>>/dev/null -s "Script executed with sudo" clint.day@hpe.com
+        fi
+fi 
+
+#CHECKS SERVER ENVIRONMENT
+#HADOOP CHECK
+if test ! -z "$(/bin/ls -l /opt/mapr/server/mrconfig 2>>/var/log/healthcheck.log|grep -i mapr)"
+        then
+env="Hadoop";
+echo -n "Big Data: ";echo $env 
+fi
+
+#VERTICA CHECK
+if test ! -z "$(/usr/bin/id vertica|grep "\(vertica\)")"
+        then
+env="Vertica";
+echo -n "Big Data: ";echo $env
+fi
+
+#ENVIRONMENT CHECK FIN
+
+if test ! -z "$(/bin/ls -l /sbin/hpasmcli 2>>/var/log/healthcheck.log|grep "-")"
+then
+model=`/sbin/hpasmcli -s "show server"|grep System|awk '{print $3,$4,$5,$6}'`
+echo -n "Model:    ";echo $model
+fi
+
+echo -n "Kernel:   ";/bin/uname -a|awk '{print $3}'
+echo -n "Release:  ";/bin/cat /etc/*release |grep -i linux |head -1
+echo ""
+
+#CHECK UPTIME
+
+uptime=`uptime |awk '{print $3}'|sed 's/\,//'`
+
+#CHECKS IF UPTIME IS IN HOURS
+if test ! -z "$(uptime |awk '{print $3}'|sed 's/\,//'|grep ':' || uptime |awk '{print $4}'|sed 's/,//'|grep -i min)"
+then
+
+small_uptime=`uptime |awk '{print $3,$4}'|sed 's/,//'`
+
+echo "Server has been online for $small_uptime"
+echo ""
+
+else
+#IF NOT IN HOURS WILL SKIP TO HERE
+        if [ "$uptime" -gt "1000" ]
+        then
+        echo "Server has been online for $uptime days! Very uptime, much long, wow"
+        echo ""
+
+        else
+        echo "Server has been online for $uptime days"
+        echo ""
+        fi
+fi
+#END OF UPTIME SECTION
+
+echo -e "$COL_BLUE Hardware Info $COL_RESET"
+echo ""
+
+#CPU
+cpucount=`cat /proc/cpuinfo |grep "model name"|wc -l`
+cputype=`cat /proc/cpuinfo|grep "model name"|sort -u|awk '{print $4,$5,$6,$7,$8,$9,$10}'`
+echo -n "CPU: $cputype";echo "(Quantity $cpucount)"
+
+#MEMORY
+mem_total_kb=`cat /proc/meminfo 2>>/var/log/healthcheck.log|grep MemTotal| awk '{print $2}'`
+bill_gates=1000000
+tmpans=`echo "$mem_total_kb/$bill_gates"|bc -l`
+decans=`echo "$tmpans"|cut -c1-5`
+echo -n "Total Memory: $decans";echo " GB"
+echo ""
+
+echo -e "$COL_BLUE Driver Info $COL_RESET"
+echo ""
+echo "Emulex be2net: "
+/sbin/modinfo be2net |grep version
+echo ""
+echo -e "$COL_BLUE Checking Network... $COL_RESET"
+sleep 1
+echo ""
+#NETWORK TEST IF STATEMENT
+
+#if test -az "$(/bin/ls -l /etc/sysconfig/network-scripts 2>>/var/log/healthcheck.log|grep 'No such file or directory')" && test ! -z "$(/bin/cat /etc/*release |grep -i linux |head -1|grep -i sles)"
+#then  #####may want to try creating temp files and comparing the values for this if statement
+
+version=`/bin/cat /etc/*release |grep -i linux |head -1`
+
+/bin/ls -l /etc/sysconfig/network-scripts 2>>/tmp/nwifstmnttest > /dev/null
+nwconf=`/bin/cat /tmp/nwifstmnttest`
+if [[ $version == *SUSE* && $nwconf == *directory* ]]
+
+then
+
+#NETWORK TEST IF STATEMENT
+if test ! -z "$(/sbin/ifconfig |grep bond 2>>/var/log/healthcheck.log)"
+then
+
+for i in `/sbin/ifconfig |grep bond|awk '{print $1}'`
+do
+#TESTS EACH FOUND ETH DEVICE
+if test ! -z "$(cd /etc/sysconfig/network;/bin/cat ifcfg-$i|grep BONDING_SLAVE 2>>/var/log/healthcheck.log)"
+
+        then
+#DISPLAYS CONFIGURED BONDS AND THE ETHS
+echo "$underline Server has $i configured $nounderline"
+echo "$i consists of: ";cd /etc/sysconfig/network;/bin/cat ifcfg-$i|grep BONDING_SLAVE 2>>/var/log/healthcheck.log|grep eth
+echo ""
+echo $i >> /tmp/nwinterfaces123
+#PINGS GATEWAY TO TEST FOR NETWORK CONNECTIVITY
+
+fi
+
+done
+
+for i in `/bin/cat /tmp/nwinterfaces123`
+do
+gateway=`netstat -nr |grep $i|grep UG|awk '{print $2}'|grep '.'|head -1`
+                if test ! -z "$(netstat -nr |grep $i|grep UG|awk '{print $2}'|grep '.')"
+                then
+                echo "Testing network connectivity using $i..."
+                echo ""
+                /bin/ping -c 5 $gateway 2>>/var/log/healthcheck.log > /tmp/pingtest123
+
+                pingtest=$(/bin/cat /tmp/pingtest123 |grep "packet loss"| awk '{print $6}');
+
+                        if [ "$pingtest" = "0%" ]
+                        then
+                        echo "No network issues found"
+                        echo "$pingtest of packets dropped while pinging gateway $gateway"
+                        echo ""
+                        /bin/rm /tmp/pingtest123
+                        else
+                        echo "server has issues pinging its gateway $gateway"
+                        echo "$pingtest of packets dropped while pinging gateway $gateway"
+                        echo ""
+                        bin/rm /tmp/pingtest123
+                        fi
+                fi
+done
+/bin/rm /tmp/nwinterfaces123
+else
+
+for i in `/sbin/ifconfig |grep eth|awk '{print $1}'`
+do
+#THIS TESTS IF THERE ARE BONDS CONFIGURED
+if test ! -z "$(ifconfig |grep $i 2>>/var/log/healthcheck.log)"
+
+        then
+echo -e "$underline$i$nounderline"
+echo "NO BONDS configured"
+
+gateway=`netstat -nr |grep $i|grep UG|awk '{print $2}'|grep '.'|head -1`
+echo ""
+#THIS TESTS IF THERE IS A GATEWAY CONFIGURED FOR THAT ETH
+if test -z "$gateway"
+
+then
+
+echo "No gateway configured"
+echo ""
+echo "Server has $i configured"
+echo -n "$i IP Address: ";ifconfig |grep -A 1 -E "^$i\s"|grep inet|awk '{print $2}'|sed 's/addr\://'
+echo -n "$i Subnet Mask: ";ifconfig |grep -A 1 -E "^$i\s"|grep Mask |awk '{print $4}'|sed 's/Mask\://'|grep '.'
+#CHECK DNS NAME RESOLUTION
+echo ""
+iptemp=`/sbin/ifconfig |grep -A 1 -E "^$i"|grep inet|awk '{print $2}'|sed 's/addr\://'`
+echo -e $underline"Checking name resolution of $i IP address"$nounderline
+        if test -z "$(/usr/bin/nslookup $iptemp|grep 'NXDOMAIN')"
+        then
+        dnstemp=`/usr/bin/nslookup $iptemp|grep "name ="|awk '{print $4}'|sed 's/net./net/'|sed 's/com./com/'|head -1`
+        echo "$iptemp resolves to $dnstemp"
+        else
+        echo "There is an issue with $iptemp resolving in DNS"
+        fi
+
+else
+
+echo ""
+echo "Server has $i configured"
+echo -n "$i IP Address: ";ifconfig |grep -A 1 -E "^$i\s"|grep inet|awk '{print $2}'|sed 's/addr\://'
+echo -n "$i Subnet Mask: ";ifconfig |grep -A 1 -E "^$i\s"|grep Mask |awk '{print $4}'|sed 's/Mask\://'|grep '.'
+
+        if test ! -z "$(netstat -nr |grep $i|awk '{print $2}')"
+
+                then
+
+                echo -n "$i Gateway: ";netstat -nr |grep $i|grep UG|awk '{print $2}'|grep '.'|head -1
+                echo ""
+                echo "Testing network connectivity..."
+                echo ""
+
+                /bin/ping -c 5 $gateway 2>>/var/log/healthcheck.log > /tmp/pingtest123
+
+                pingtest=$(/bin/cat /tmp/pingtest123 |grep "packet loss"| awk '{print $6}');
+
+                if [ "$pingtest" = "0%" ]
+                then
+                echo "No network issues found"
+                echo "$pingtest of packets dropped while pinging gateway $gateway"
+                echo ""
+                /bin/rm /tmp/pingtest123
+                else
+                echo "Server has issues pinging its gateway $gateway"
+                echo "$pingtest of packets dropped while pinging gateway $gateway"
+                echo ""
+                /bin/rm /tmp/pingtest123
+                fi
+
+        fi
+#GATEWAY IF STATEMENT END
+fi
+#END OF NETWORK TEST IF STATEMENT
+fi
+
+#CHECK DNS NAME RESOLUTION
+iptemp=`/sbin/ifconfig |grep -A 1 -E "^$i\s"|grep inet|awk '{print $2}'|sed 's/addr\://'`
+
+echo -e $underline"Checking name resolution of $i IP address"$underline
+
+        if test -z "$(/usr/bin/nslookup $iptemp|grep 'NXDOMAIN')"
+        then
+        dnstemp=`/usr/bin/nslookup $iptemp|grep "name ="|awk '{print $4}'|sed 's/net./net/'|sed 's/com./com/'`
+        echo "$iptemp resolves to $dnstemp"
+        else
+        echo "There is an issue with $iptemp resolving in DNS"
+        fi
+
+
+#END OF NETWORK TEST FOR LOOP
+done
+#END OF NETWORK TEST SECTION
+fi
+
+#IF RHEL IT WILL EXECUTE THIS SECTION OF CODE
+else
+
+if test ! -z "$(/sbin/ifconfig |grep bond 2>>/var/log/healthcheck.log)"
+then
+
+for i in `/sbin/ifconfig |grep bond|awk '{print $1}'`
+do
+#TESTS EACH FOUND ETH DEVICE
+if test ! -z "$(cd /etc/sysconfig/network-scripts; grep $i * 2>>/var/log/healthcheck.log)"
+
+        then
+#DISPLAYS CONFIGURED BONDS AND THE ETHS
+echo "$underline Server has $i configured $nounderline"
+echo "$i consists of: "; cd /etc/sysconfig/network-scripts; grep bond0 * 2>>/var/log/healthcheck.log|grep eth|sed 's/:MASTER=bond[0-9]//'|sed 's/ifcfg-//'
+echo ""
+#PINGS GATEWAY TO TEST FOR NETWORK CONNECTIVITY
+
+gateway=`netstat -nr |grep $i|grep UG|awk '{print $2}'|grep '.'|head -1`
+                if test ! -z "$(netstat -nr |grep $i|grep UG|awk '{print $2}'|grep '.')"
+                then
+                echo "Testing network connectivity..."
+                echo ""
+                /bin/ping -c 5 $gateway 2>>/var/log/healthcheck.log > /tmp/pingtest123
+
+                pingtest=$(/bin/cat /tmp/pingtest123 |grep "packet loss"| awk '{print $6}');
+
+                        if [ "$pingtest" = "0%" ]
+                        then
+                        echo "No network issues found"
+                        echo "$pingtest of packets dropped while pinging gateway $gateway"
+                        echo ""
+                        /bin/rm /tmp/pingtest123
+                        else
+                        echo "server has issues pinging its gateway $gateway"
+                        echo "$pingtest of packets dropped while pinging gateway $gateway"
+                        echo ""
+                        bin/rm /tmp/pingtest123
+                        fi
+                fi
+fi
+done
+
+else
+
+for i in `ifconfig |grep eth|awk '{print $1}'`
+do
+#THIS TESTS IF THERE ARE BONDS CONFIGURED
+if test ! -z "$(ifconfig |grep $i 2>>/var/log/healthcheck.log)"
+
+        then
+echo -e "$underline$i$nounderline"
+echo "NO BONDS configured"
+
+gateway=`netstat -nr |grep $i|grep UG|awk '{print $2}'|grep '.'|head -1`
+#THIS TESTS IF THERE IS A GATEWAY CONFIGURED FOR THAT ETH
+if test -z "$gateway"
+
+then
+
+echo "No gateway configured"
+echo ""
+echo "Server has $i configured"
+
+echo -n "$i IP Address: ";ifconfig |grep -A 1 -E "^$i\s"|grep inet|awk '{print $2}'|sed 's/addr\://'
+echo -n "$i Subnet Mask: ";ifconfig |grep -A 1 -E "^$i\s"|grep Mask |awk '{print $4}'|sed 's/Mask\://'|grep '.'
+
+else
+
+echo "Server has $i configured"
+echo -n "$i IP Address: ";ifconfig |grep -A 1 -E "^$i\s"|grep inet|awk '{print $2}'|sed 's/addr\://'
+echo -n "$i Subnet Mask: ";ifconfig |grep -A 1 -E "^$i\s"|grep Mask |awk '{print $4}'|sed 's/Mask\://'|grep '.'
+
+        if test ! -z "$(netstat -nr |grep $i|awk '{print $2}')"
+
+                then
+
+                echo -n "$i Gateway: ";netstat -nr |grep $i|grep UG|awk '{print $2}'|grep '.'|head -1
+                echo ""
+                echo "Testing network connectivity..."
+                echo ""
+
+                /bin/ping -c 5 $gateway 2>>/var/log/healthcheck.log > /tmp/pingtest123
+
+                pingtest=$(/bin/cat /tmp/pingtest123 |grep "packet loss"| awk '{print $6}');
+
+                if [ "$pingtest" = "0%" ]
+                then
+                echo "No network issues found"
+                echo "$pingtest of packets dropped while pinging gateway $gateway"
+                echo ""
+                /bin/rm /tmp/pingtest123
+                else
+                echo "Server has issues pinging its gateway $gateway"
+                echo "$pingtest of packets dropped while pinging gateway $gateway"
+                echo ""
+                /bin/rm /tmp/pingtest123
+                fi
+        fi
+
+#GATEWAY IF STATEMENT END
+fi
+#END OF NETWORK TEST IF STATEMENT
+fi
+
+#DNS RESOLUTION TEST
+echo ""
+iptemp=`ifconfig |grep -A 1 -E "^$i"|grep inet|awk '{print $2}'|sed 's/addr\://'|head -1`
+echo -e $underline"Checking name resolution of $i IP address"$nounderline
+        if test -z "$(/usr/bin/nslookup $iptemp|grep 'NXDOMAIN')"
+        then
+        dnstemp=`/usr/bin/nslookup $iptemp|grep "name ="|awk '{print $4}'|sed 's/net./net/'|sed 's/com./com/'|head -1`
+        echo "$iptemp resolves to $dnstemp"
+        else
+        echo "There is an issue with $iptemp resolving in DNS"
+        fi
+
+
+#END OF NETWORK TEST FOR LOOP
+done
+#END OF NETWORK TEST SECTION
+fi
+#END OF TEST FOR SLES OR RHEL
+fi
+
+echo ""
+echo -e "$COL_BLUE Checking Hard Drives... $COL_RESET"
+echo ""
+if test ! -z "$(/bin/ls -l /usr/sbin/hpacucli 2>>/var/log/healthcheck.log|grep -v 'No such file')"
+then
+        if test ! -z "$(/usr/sbin/hpacucli ctrl all show config |grep -i array)"
+                then
+
+                if test ! -z "$(/usr/sbin/hpacucli ctrl all show config|grep Failed)"
+                        then
+                echo "The following drives have failed and need checking:"
+                /usr/sbin/hpacucli ctrl all show config|grep Failed
+                echo ""
+                        else
+                                if test ! -z "$(/usr/sbin/hpacucli ctrl all show config|grep 'Predictive Failure')"
+                                then
+                                echo "The following drives are showing Predicted Failure and need checking:"
+                                /usr/sbin/hpacucli ctrl all show config |grep 'Predictive Failure'
+                                echo ""
+                                else
+                                        echo "No issues found, all disks healthy"
+                                        echo ""
+                                fi
+                fi
+#CHECKS CACHE STATUS
+                for i in `/usr/sbin/hpacucli ctrl all show detail |grep "Slot: "|sed 's/Slot: /Slot:/'|sed 's/   //'`
+                do
+                        if test ! -z "$(/usr/sbin/hpacucli ctrl all show detail|grep -A 20 "Slot:"|grep 'Cache Status: Permanently Disabled')"
+                                then
+                                        echo "The Array Controller at $i has a failed cache module"
+                                        echo ""
+                        fi
+                done
+
+        fi
+else
+echo "Server does not have disks managed by hpacucli"
+echo ""
+fi
+
+
+#CHECKS MAPR DISKS
+
+if test ! -z "$(/bin/ls -l /opt/mapr/server/mrconfig 2>>/var/log/healthcheck.log|grep -i mapr)"
+        then
+        echo -e "$COL_BLUE Checking MapR disks.. $COL_RESET"
+        echo ""
+        if test ! -z "$(/opt/mapr/server/mrconfig disk list |grep -i offline)"
+                then
+                for i in `/opt/mapr/server/mrconfig disk list |grep -B 5 "Offline"|grep ListDisks|grep -v "ListDisks resp"|awk '{print $2}'`
+                        do
+                        echo -n "Disk $i has gone offline and needs to be checked"
+                        echo ""
+                done
+                        if test ! -z "$(/usr/sbin/hpacucli ctrl all show config |grep -i fail)"
+                                then
+                                echo ""
+                                echo "The following drive\(s\) may need to be replaced, check hpacucli:"
+                                echo ""
+                                /usr/sbin/hpacucli ctrl all show config |grep -i fail
+                        fi
+        else
+        echo ""
+        echo "All MapR disks are OK"
+        echo ""
+        /opt/mapr/server/mrconfig sp list
+        fi
+else
+echo ""
+fi
+
+
+
+#IF DL SERVER WILL CHECK FANS AND DIMMS
+
+if test ! -z "$(/bin/ls -l /sbin/hpasmcli 2>>/var/log/healthcheck.log)"
+        then
+        echo -e "$COL_BLUE Checking Hardware... $COL_RESET"
+
+        /sbin/hpasmcli -s "show fans";/sbin/hpasmcli -s "show dimm"|egrep "Processor|Module|Status"|sed 's/                   //'|sed 's/Module/DIMM/'
+
+        echo ""
+
+        /sbin/hpasmcli -s "show powersupply"|egrep "Power supply|Condition"
+fi
+
+echo ""
+echo -e "$COL_BLUE Checking Volume Groups... $COL_RESET"
+echo ""
+
+if test ! -z "$(/usr/sbin/vgdisplay 2>>/var/log/healthcheck.log)"
+then
+for i in `/usr/sbin/vgdisplay -v 2>>/var/log/healthcheck.log|grep "VG Name"|sed 's/VG Name//'|sed 's/\"//'|sed 's/                 //'|sed 's/ //'|sort -u`
+do
+        if test -z "$(/usr/sbin/vgdisplay -v $i 2>>/var/log/healthcheck.log|/bin/grep -i 'not available')"
+                then
+                echo "All lvols available for $i. No issues found"
+                echo ""
+                else
+                echo "Need to check lvols for $i"
+        fi
+done
+else
+if test ! -z "$(/sbin/vgdisplay 2>>/var/log/healthcheck.log)"
+then
+for i in `/sbin/vgdisplay -v 2>>/var/log/healthcheck.log|grep "VG Name"|sed 's/VG Name//'|sed 's/\"//'|sed 's/                 //'|sed 's/ //'|sort -u`
+do
+        if test -z "$(/sbin/vgdisplay -v $i 2>>/var/log/healthcheck.log|/bin/grep -i 'not available')"
+                then
+                echo "All lvols available for $i. No issues found"
+                echo ""
+                else
+                echo "Need to check lvols for $i"
+        fi
+done
+else
+echo "No volume groups found.. might want to check that"
+echo ""
+fi
+fi
+
+if test ! -z "$(/bin/ls -l /usr/local/bin/path_check 2>>/var/log/healthcheck.log|grep path_check)"
+then
+echo -e "$COL_BLUE Checking SAN... $COL_RESET"
+fi
+
+#LUN PATH CHECK
+if test ! -z "$(/bin/ls -l /usr/local/bin/path_check 2>>/var/log/healthcheck.log|grep path_check)"
+then
+
+        if test ! -z "$(/usr/local/bin/path_check 2>>/var/log/healthcheck.log|grep -i virtual)"
+                then
+
+                echo ""
+                echo "This is a virtual machine, multipath isn't used"
+                echo ""
+
+        else
+
+                /usr/local/bin/path_check 2>>/var/log/healthcheck.log|awk '{print $4}' >/tmp/pathcheck1234
+                pathtest=$(/bin/cat /tmp/pathcheck1234)
+                if [ "$pathtest" = "0" ]
+                then
+                        echo ""
+                        echo "No LUN paths missing"
+                        /usr/local/bin/path_check 2>>/var/log/healthcheck.log
+                        echo ""
+                else
+                if [[ ! -s /tmp/pathcheck1234 ]]
+                        then
+                        echo ""
+                        echo "Error occurred while checking multipath, please check /var/log/healthcheck.log"
+                        echo ""
+                else
+                        echo ""
+                        echo "ERROR: LUN paths missing!!"
+                        echo ""
+                        /usr/local/bin/path_check -v 2>>/var/log/healthcheck.log
+                        echo ""
+                fi
+                fi
+                /bin/rm /tmp/pathcheck1234
+        fi
+        #WILL TEST FOR MISSING PATH BASED ON SANINFO
+if test ! -z "$(/bin/ls -l /sbin/multipath 2>>/var/log/healthcheck.log|grep multipath)"
+
+then
+
+diskcheck1=`/usr/local/bin/saninfo -m|awk '{print $6}'|grep -v '^$'|grep 'sd'`
+diskcheck2=`/usr/local/bin/saninfo -m|awk '{print $7}'|grep -v '^$'|grep 'sd'`
+
+        if [[ -z "$diskcheck1" || -z "$diskcheck2" ]]
+
+        then echo -e "\033[5mWARNING - Saninfo is reporting a missing path\033[0m"
+
+        fi
+fi
+	#END SANINFO CHECK
+fi
+/bin/rm /tmp/nwifstmnttest
+
+#CHECKS VERITAS DISK GROUPS
+
+if test ! -z "$(/bin/ls -l /opt/VRTS 2>>/var/log/healthcheck.log|grep bin)"
+then
+
+echo -e "$COL_BLUE Checking VxVM... $COL_RESET"
+
+if test ! -z "$(/opt/VRTS/bin/vxdg list |grep dg|awk '{print $1}')"
+then
+
+for i in `/opt/VRTS/bin/vxdg list |grep dg|awk '{print $1}'`
+do
+echo ""
+echo -e "$underline $i Plex Status: $COL_RESET"
+
+        for x in `vxprint -g $i -th |grep 'pl '|awk '{print $2}'|grep -v "^$"`
+        do
+        echo ""
+        echo -n "$x ";vxprint -g $i -th |grep $x|awk '{print $4,$5}' |grep [A-Z]
+        done
+done
+else
+
+echo ""
+echo "No DGs imported on this server"
+fi
+fi
+
+
+#CHECKS FILESYSTEMS
+
+echo ""
+echo -e "$COL_BLUE Checking Filesystems... $COL_RESET"
+echo ""
+
+#CHECKS IF ISSUES 0 means good 1 means bad
+numa=0;
+
+if test ! -z "$(/bin/df |grep '100%')"
+then
+
+echo -e "\033[5mWARNING - Filesystem(s) at 100% capacity:\033[0m"
+echo ""
+/bin/df |grep "100%"
+echo ""
+
+numa=1;
+
+fi
+
+if test ! -z "$(/bin/cat /proc/mounts |grep 'ro,')"
+then
+
+echo -e "\033[5mWARNING - Filesystem(s) mounted Read-Only:\033[0m"
+echo ""
+
+/bin/cat /proc/mounts |grep 'ro,'|awk '{print $2}'
+echo ""
+numa=1;
+
+fi
+
+if test ! -z "$(/bin/df |grep -i error)"
+then
+
+echo -e "\033[5mWARNING - I/O Errors found:\033[0m"
+echo ""
+
+/bin/df |grep -i error
+echo ""
+numa=1;
+
+fi
+
+
+if [ "$numa" = "0" ]
+then
+echo "No obvious filesystem issues found"
+echo ""
+fi
+
+#CHECKS FOR CLUSTER AND REPORTS HEALTH
+
+if test ! -z "$(/bin/ls -l /etc/VRTSvcs/conf/config/main.cf 2>>/var/log/healthcheck.log|grep '-')"
+then
+
+echo -e  "$COL_BLUE Checking status of VCS Cluster Packages... $COL_RESET"
+echo ""
+
+for i in `/bin/cat /etc/VRTSvcs/conf/config/main.cf |grep group|grep '('|awk '{print $2}'`
+do
+
+echo "Group $i Status:"
+echo ""
+
+        if test ! -z "$(/opt/VRTSvcs/bin/hastatus -sum|grep $i |grep ONLINE)"
+        then
+
+        x=$(/opt/VRTSvcs/bin/hastatus -sum|grep $i |grep ONLINE|awk '{print $3}');
+
+        echo "ONLINE on $x"
+        echo ""
+        else
+        echo "ERROR: $i is not ONLINE and should be checked"
+        echo ""
+        fi
+
+done
+
+else
+
+if test ! -z "$(/bin/ls -ld /usr/local/cmcluster 2>>/var/log/healthcheck.log|grep '-')"
+then
+
+echo -e "$COL_BLUE Checking status of SGLX Cluster Packages... $COL_RESET"
+
+/usr/local/cmcluster/bin/cmviewcl
+
+fi
+fi
+
+}
+fi

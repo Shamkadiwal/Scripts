@@ -1,0 +1,14 @@
+heat_template_version: 2016-04-08
+
+resources:
+  server3:
+    type: OS::Nova::Server
+    properties:
+      image: cirros
+      flavor: m1.tiny
+      key_name: stack2
+      networks:
+      - network: admin_internal_net
+
+  server4:
+    type: /root/4stackyaml/stack3.yaml

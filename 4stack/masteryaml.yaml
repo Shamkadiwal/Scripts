@@ -1,0 +1,23 @@
+heat_template_version: 2016-04-08
+description: Launch a basic instance with CirrOS image using the
+
+             ``m1.tiny`` flavor, ``mykey`` key,  and one network.
+resources:
+  server:
+    type: OS::Nova::Server
+    properties:
+      image: cirros
+      flavor: m1.tiny
+      key_name: stack1
+      networks:
+      - network: admin_internal_net
+  server2:
+    type: /root/4stackyaml/stack1.yaml
+
+outputs:
+  instance_name:
+    description: Name of the instance.
+    value: { get_attr: [ server, name ] }
+  instance_ip:
+    description: IP address of the instance.
+    value: { get_attr: [ server, first_address ] }
